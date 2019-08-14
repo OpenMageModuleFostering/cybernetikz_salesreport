@@ -2,7 +2,7 @@
 <config>
     <modules>
         <Cybernetikz_Salesreport>
-            <version>0.1.2</version>
+            <version>0.1.3</version>
         </Cybernetikz_Salesreport>
     </modules>
     
@@ -44,7 +44,7 @@
 	<default>
 		<salesreports>
 			<reportsetting>
-				<report_name>SalesReport</report_name>
+				<report_name>CustomSalesReport</report_name>
 				<report_address>shipping</report_address>
 			</reportsetting>
 		</salesreports>

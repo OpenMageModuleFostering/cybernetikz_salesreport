@@ -23,44 +23,53 @@ public function indexAction()
 		if ($data = $this->getRequest()->getPost()) {
 
 			$orserstatus = "";
-			
-			/*====================== Start Code for magento Orders product =====================*/
-			//echo "<pre>";
 			$reportaddress = Mage::helper('salesreport')->getReportAddress();
 			$addtess_title = ($reportaddress=="billing")?"Billing":"Shipping";
 			$orders_csv_row ="Period,Order Id,Item Name,Qty,Unit Price,Row Total,$addtess_title Name,Email,Street Address,City,State,Postcode,Country";
 			$orders_csv_row.="\n";
 			
-			$to=$_REQUEST['to'];
-			$from=$_REQUEST['from'];
-		
-			$to_date = date('Y-m-d' . ' 00:00:00', strtotime($to));
-			$from_date = date('Y-m-d' . ' 00:00:00', strtotime($from));
+			$filter_type = $_REQUEST['filter_type'];
 			
+			$from = $_REQUEST['from'];
+			$to = $_REQUEST['to'];
+			
+			$from_date = date('Y-m-d' . ' 00:00:00', strtotime($from));
+			$to_date = date('Y-m-d' . ' 23:59:59', strtotime($to));
+			
+			$filter_model  = ($filter_type == 'shipping_date')
+            ? 'sales/order_shipment_collection'
+            : 'sales/order_collection';
 			
 			if($_REQUEST['show_order_statuses']>0){
 				$orserstatus = $_REQUEST['order_statuses'];
-				$orders = Mage::getResourceModel('sales/order_collection')
-					->addAttributeToSelect('*')
-					->addFieldToFilter('created_at', array('from'=>$from_date, 'to'=>$to_date))
-					->addFieldToFilter('status', $orserstatus)
-					->load();
+				$_orderCollections = Mage::getResourceModel($filter_model);
+					$_orderCollections->addAttributeToSelect('*');
+					$_orderCollections->addFieldToFilter('created_at', array('from'=>$from_date, 'to'=>$to_date));
+					if($filter_type == 'order_date'){
+						$_orderCollections->addFieldToFilter('status', $orserstatus);
+					}  
+					$_orderCollections->setOrder('created_at', 'desc');              
+					$_orderCollections->load();
 			}else{
-				$orders = Mage::getResourceModel('sales/order_collection')
+				$_orderCollections = Mage::getResourceModel($filter_model)
 					->addAttributeToSelect('*')
 					->addFieldToFilter('created_at', array('from'=>$from_date, 'to'=>$to_date))
+					->setOrder('created_at', 'desc')
 					->load();
 			}
-					
+								
 			$i=0;
-			foreach($orders as $key=>$single_order) {
-				//print_r($single_order);
-				//exit;
-				$thisId = $single_order->getId();
-				$myOrder=Mage::getModel('sales/order');
-				$myOrder->load($thisId);
+			foreach($_orderCollections as $key=>$single_order) {				
+				if(($filter_type == 'shipping_date')){
+					$_orderId = $single_order->getOrderId();
+				}else{
+					$_orderId = $single_order->getId();
+				}
 				
-				//Some random fields
+				$myOrder = Mage::getModel('sales/order');
+				$myOrder->load($_orderId);
+				
+				//Some Random Fields
 				if($reportaddress=="billing"){
 									
 					$country_id = utf8_decode($myOrder->getBillingAddress()->getCountryId());
@@ -69,13 +78,18 @@ public function indexAction()
 					$name = utf8_decode($myOrder->getBillingAddress()->getFirstname()." ".$myOrder->getBillingAddress()->getLastname());
 					
 					$billingaddress = $myOrder->getBillingAddress()->getStreet();
-					$address = utf8_decode($billingaddress[0]).", ".utf8_decode($billingaddress[1]);
+					$address = "";
+					$address[] = utf8_decode($billingaddress[0]);
+					if($billingaddress[1]){
+						$address[] = utf8_decode($billingaddress[1]);
+					}
+					$address = implode(", ",$address);
 					
-					$city=utf8_decode($myOrder->getBillingAddress()->getCity());
+					$city = utf8_decode($myOrder->getBillingAddress()->getCity());
 					
-					$region=utf8_decode($myOrder->getBillingAddress()->getRegion());
+					$region = utf8_decode($myOrder->getBillingAddress()->getRegion());
 					
-					$postcode =utf8_decode($myOrder->getBillingAddress()->getPostcode());
+					$postcode = utf8_decode($myOrder->getBillingAddress()->getPostcode());
 					
 				}else{
 					
@@ -84,18 +98,23 @@ public function indexAction()
 					
 					$name = utf8_decode($myOrder->getShippingAddress()->getFirstname()." ".$myOrder->getShippingAddress()->getLastname());
 					
-					$billingaddress = $myOrder->getShippingAddress()->getStreet();
-					$address = utf8_decode($billingaddress[0]).", ".utf8_decode($billingaddress[1]);
+					$shippingaddress = $myOrder->getShippingAddress()->getStreet();
+					$address = "";
+					$address[] = utf8_decode($shippingaddress[0]);
+					if($shippingaddress[1]){
+						$address[] = utf8_decode($shippingaddress[1]);
+					}
+					$address = implode(", ",$address);
 					
-					$city=utf8_decode($myOrder->getShippingAddress()->getCity());
+					$city = utf8_decode($myOrder->getShippingAddress()->getCity());
 					
-					$region=utf8_decode($myOrder->getShippingAddress()->getRegion());
+					$region = utf8_decode($myOrder->getShippingAddress()->getRegion());
 					
-					$postcode =utf8_decode($myOrder->getShippingAddress()->getPostcode());
+					$postcode = utf8_decode($myOrder->getShippingAddress()->getPostcode());
 				}
 							
 				$myOrder->loadByIncrementId($myOrder->getIncrementId());
-				//$payment_method = $myOrder->getPayment()->getMethodInstance()->getTitle();
+				
 				$store = Mage::app()->getStore();
 				$items = $myOrder->getItemsCollection();
 				$ic=1;
@@ -111,7 +130,7 @@ public function indexAction()
 					endif;
 					
 					if($item->getParentItemId() && round($item->getOriginalPrice())==0){
-						$parentitem = $order->getItemById($item->getParentItemId());
+						$parentitem = $myOrder->getItemById($item->getParentItemId());
 
 						$originalprice = $parentitem->getOriginalPrice();
 						
@@ -121,36 +140,26 @@ public function indexAction()
 						if(round($parentitem->getDiscountAmount())!=0){
 							$discountamount=$parentitem->getDiscountAmount();
 							$subtotal=($subtotal-$discountamount);
-						}
-						
-						$subtotal = number_format($subtotal,2);
-						
+						}						
+						$subtotal = number_format($subtotal,2);						
 						$eachitemdiscountamount = ($discountamount/$itemorderqty);
-						$discountamount = number_format($eachitemdiscountamount,2);
-						
-						$taxpercent = $parentitem->getTaxPercent();
-						
+						$discountamount = number_format($eachitemdiscountamount,2);						
+						$taxpercent = $parentitem->getTaxPercent();						
 						$eachitemvat = $vatamount_eachproduct/$itemorderqty;														
 						$totalvatdisamount = $eachitemvat+$eachitemdiscountamount;							
 						$net_price = round($originalprice-($totalvatdisamount),2);						
 					}else{						
-						$originalprice = $item->getOriginalPrice();
-						
-						$subtotal = ($item->getOriginalPrice()*$itemorderqty);
-						
+						$originalprice = $item->getOriginalPrice();						
+						$subtotal = ($item->getOriginalPrice()*$itemorderqty);						
 						$discountamount=0;				
 						if(round($item->getDiscountAmount())!=0){
 							$discountamount=$item->getDiscountAmount();
 							$subtotal=($subtotal-$discountamount);
-						}
-						
-						$subtotal = number_format($subtotal,2);
-						
+						}						
+						$subtotal = number_format($subtotal,2);						
 						$eachitemdiscountamount = ($discountamount/$itemorderqty);
-						$discountamount = number_format($eachitemdiscountamount,2);
-						
-						$taxpercent = $item->getTaxPercent();
-						
+						$discountamount = number_format($eachitemdiscountamount,2);						
+						$taxpercent = $item->getTaxPercent();						
 						$eachitemvat = $vatamount_eachproduct/$itemorderqty;														
 						$totalvatdisamount = $eachitemvat+$eachitemdiscountamount;							
 						$net_price = round($originalprice-($totalvatdisamount),2);
@@ -166,11 +175,8 @@ public function indexAction()
 						$customer_email=$myOrder->getCustomerEmail();
 					}					
 
-					//echo $myOrder->getCreatedAt();
-					//exit;
 					$datarow =  array(date("d/m/Y",strtotime($myOrder->getCreatedAt())), $myOrder->getIncrementId(), utf8_decode($item->getName()), $itemorderqty, utf8_decode($net_price),$subtotal,$name,$customer_email,$address,$city,$region,$postcode,$country);
-					
-					//print_r($csvtitles);			
+								
 					$line = "";
 					$comma = "";
 					foreach($datarow as $titlename) {
@@ -184,12 +190,10 @@ public function indexAction()
 									
 				}
 			}
-		$reportname = Mage::helper('salesreport')->getReportName();
-		 $fileName   = $reportname.'.csv';
-		//print_r($orders_csv_row);
-		 //exit;
-		 $this->_sendUploadResponse($fileName, $orders_csv_row);
-		 
+			
+			$reportname = Mage::helper('salesreport')->getReportName();
+			$fileName   = $reportname.'.csv';
+			$this->_sendUploadResponse($fileName, $orders_csv_row);
 		}
     }
 	
