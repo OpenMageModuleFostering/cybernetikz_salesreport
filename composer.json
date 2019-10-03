@@ -1,7 +1,7 @@
 {
-    "name": "OpenMageModuleFostering\/Cybernetikz_Salesreport",
+    "name": "openmage-module-fostering\/cybernetikz_salesreport",
     "type": "magento-module",
-    "license": "Open-Software-License-(OSL-3.0)",
+    "license": "OSL-3.0",
     "homepage": "",
     "description": "Custom Reporting with Product and Billing\/Shipping info. Easy searchable option by order date and status.",
     "authors": [
